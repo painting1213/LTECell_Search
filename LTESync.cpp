@@ -2,38 +2,39 @@
 #include "Head.h"
 #include <cmath>
 
-struct Signal_float
-{
-	float I_data;               // 4 bytes
-	float Q_data;
-};
-
 //LTE Sync Init
 void LTESync_init(ifstream &infile)
 {
-	get_ss_cs(infile);           //get ss_cs[5760]
+	get_ss_cs(infile); //get ss_cs[5760]
 }
 
 //From File to get ss_cs_I[5760], ss_cs_Q[5760]
 void get_ss_cs(ifstream &infile)
 {
+	struct Signal_float
+	{
+		float I_data; // 4 bytes
+		float Q_data;
+	};
+
 	Signal_float signal;
 	int readBytes = 0;
 
 	if (!infile)
 	{
-		cout << "Error, can not open the file \n" << endl;
+		cout << "Error, can not open the file \n"
+			 << endl;
 		return;
 	}
 
 	while (infile.read((char *)&signal, sizeof(signal)) && readBytes < 5760 * 8)
 	{
-		readBytes += infile.gcount();           //count the read bytes
-		
+		readBytes += infile.gcount(); //count the read bytes
+
 		if (readBytes % 8 == 0 && readBytes != 0)
 		{
-			ss_cs_I[readBytes / 8 - 1] = signal.I_data;
-			ss_cs_Q[readBytes / 8 - 1] = signal.Q_data;
+			process_I[readBytes / 8 - 1] = signal.I_data;
+			process_Q[readBytes / 8 - 1] = signal.Q_data;
 		}
 	}
 	//cout << "the numbers of total data is: " << readBytes / 8 << endl;
@@ -52,12 +53,12 @@ void ifft(float *inputI, float *inputQ, int scno, float *ouputI, float *ouputQ)
 	float sumq = 0;
 	float expi = 0;
 	float expq = 0;
-	
+
 	for (n = 0; n < scno; n++)
 	{
 		sumi = 0;
 		sumq = 0;
-		
+
 		for (k = 0; k < scno; k++)
 		{
 			expi = cos(1 * 2 * pi * n * k / scno);
@@ -65,7 +66,7 @@ void ifft(float *inputI, float *inputQ, int scno, float *ouputI, float *ouputQ)
 			sumi = sumi + inputI[k] * expi - inputQ[k] * expq;
 			sumq = sumq + inputI[k] * expq + inputQ[k] * expi;
 		}
-		
+
 		ouputI[n] = sumi / (1.0 * scno);
 		ouputQ[n] = sumq / (1.0 * scno);
 	}
@@ -78,7 +79,7 @@ void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ)
 {
 	int n = 0;
 	int k = 0;
-	
+
 	//double i = 0;
 	//double q = 0;
 	double sumi = 0;
@@ -93,7 +94,7 @@ void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ)
 
 		for (n = 0; n < scno; n++)
 		{
-			expi = cos( 1 * 2 * pi * k * n / scno);
+			expi = cos(1 * 2 * pi * k * n / scno);
 			expq = sin(-1 * 2 * pi * k * n / scno);
 
 			sumi = sumi + inputI[n] * expi - inputQ[n] * expq;
@@ -112,15 +113,15 @@ void swapPSS(float *PSSfreq_I, float *PSSfreq_Q, float *PSSfreq_tmpI, float *PSS
 	int i = 0;
 	int length = 64;
 
-	float *tmpI = new float[length];     //delete
-	float *tmpQ = new float[length];     //delete
+	float *tmpI = new float[length]; //delete
+	float *tmpQ = new float[length]; //delete
 
-	return_zero(tmpI, length);           // make all tmpI = 0
-	return_zero(tmpQ, length);           // make all tmpQ = 0
+	return_zero(tmpI, length); // make all tmpI = 0
+	return_zero(tmpQ, length); // make all tmpQ = 0
 
 	for (i = 1; i < 32; i++)
 	{
-		tmpI[i] = PSSfreq_I[30 + i];     //tmp(1:31) = PSSfreq(31:61), begin at tmp[1]
+		tmpI[i] = PSSfreq_I[30 + i]; //tmp(1:31) = PSSfreq(31:61), begin at tmp[1]
 		tmpQ[i] = PSSfreq_Q[30 + i];
 
 		tmpI[i + 32] = PSSfreq_I[i - 1]; //tmp(33:63) = PSSfreq(0:30), begin at tmp[33]
@@ -142,7 +143,7 @@ void swapPSS(float *PSSfreq_I, float *PSSfreq_Q, float *PSSfreq_tmpI, float *PSS
 float calc_Sequence_Modulus(float *ss_cs_I, float *ss_cs_Q, int samp_idx)
 {
 	float Modulus = 0;
-	for (int i = samp_idx; i < samp_idx + Length_FFT; i++)                    //the length of sequence is 64
+	for (int i = samp_idx; i < samp_idx + Length_FFT; i++) //the length of sequence is 64
 	{
 		Modulus = Modulus + ss_cs_I[i] * ss_cs_I[i] + ss_cs_Q[i] * ss_cs_Q[i];
 	}
@@ -155,7 +156,7 @@ float calc_Sequence_Modulus(float *ss_cs_I, float *ss_cs_Q, int samp_idx)
 float calc_complex_Multi(float *PSStime_I, float *PSStime_Q, float *ss_cs_I, float *ss_cs_Q, int samp_idx)
 {
 	float Multi = 0;
-	for (int i = samp_idx, j = 0; i < samp_idx + Length_FFT, j < 64; i++, j++)  //the length of sequence is 64
+	for (int i = samp_idx, j = 0; i < samp_idx + Length_FFT, j < 64; i++, j++) //the length of sequence is 64
 	{
 		Multi = Multi + pow(fabs(PSStime_I[j] * ss_cs_I[i] + PSStime_Q[j] * ss_cs_Q[i]), 2);
 		//Multi = Multi + PSStime_I[j] * ss_cs_I[i] + PSStime_Q[j] * ss_cs_Q[i];
@@ -200,12 +201,12 @@ void genPSS(int Nid_2)
 	for (int i = 0; i < 31; i++)
 	{
 		PSSfreq_I[i] = cos(-1 * pi * u * i * (i + 1) / 63.0);
-		PSSfreq_Q[i] = sin( 1 * pi * u * i * (i + 1) / 63.0);
+		PSSfreq_Q[i] = sin(1 * pi * u * i * (i + 1) / 63.0);
 	}
 	for (int i = 31; i < 62; i++)
 	{
 		PSSfreq_I[i] = cos(-1 * pi * u * (i + 2) * (i + 1) / 63.0);
-		PSSfreq_Q[i] = sin( 1 * pi * u * (i + 2) * (i + 1) / 63.0);
+		PSSfreq_Q[i] = sin(1 * pi * u * (i + 2) * (i + 1) / 63.0);
 	}
 }
 
@@ -219,20 +220,20 @@ void genSSS(int Nid_1, int Nid_2)
 	float q_prime = 0;
 	float m_prime = 0;
 
-	int s0_m0_idx = 0;     //s0_m0[idx]
-	int s1_m1_idx = 0;     //s1_m1[idx]
+	int s0_m0_idx = 0; //s0_m0[idx]
+	int s1_m1_idx = 0; //s1_m1[idx]
 
-	int c0_idx = 0;        //c0[idx]
-	int c1_idx = 0;        //c1[idx]
+	int c0_idx = 0; //c0[idx]
+	int c1_idx = 0; //c1[idx]
 
-	int z1_m0_idx = 0;     //z1_m1[idx]
-	int z1_m1_idx = 0;     //z1_m1[idx]
+	int z1_m0_idx = 0; //z1_m1[idx]
+	int z1_m1_idx = 0; //z1_m1[idx]
 
 	int x_s_tilda[31] = {0, 0, 0, 0, 1}; // [0]=0, [1]=0, [2]=0, [3]=0, [4]=1
-	int s_tilda[31];       //not initialize
+	int s_tilda[31];					 //not initialize
 
 	int x_c_tilda[31] = {0, 0, 0, 0, 1}; // [0]=0, [1]=0, [2]=0, [3]=0, [4]=1
-	int c_tilda[31];       //not initialize
+	int c_tilda[31];					 //not initialize
 
 	int x_z_tilda[31] = {0, 0, 0, 0, 1}; // [0]=0, [1]=0, [2]=0, [3]=0, [4]=1
 	int z_tilda[31];
@@ -260,11 +261,11 @@ void genSSS(int Nid_1, int Nid_2)
 	}
 
 	// generate m0 and m1
-	q_prime = floor((1.0 * Nid_1) / 30);                              //floor(x)<=x
-	      q = floor(1.0 * (Nid_1 + q_prime * (q_prime + 1) / 2) / 30);
+	q_prime = floor((1.0 * Nid_1) / 30); //floor(x)<=x
+	q = floor(1.0 * (Nid_1 + q_prime * (q_prime + 1) / 2) / 30);
 	m_prime = Nid_1 + q * (q + 1) / 2;
-	     m0 = mod(m_prime, 31);
-	     m1 = mod((m0 + floor(m_prime / 31) + 1), 31);
+	m0 = mod(m_prime, 31);
+	m1 = mod((m0 + floor(m_prime / 31) + 1), 31);
 
 	// generate s_tilda
 	for (int i = 0; i < 26; i++)
@@ -362,7 +363,7 @@ int findPSS(float *ss_cs_I, float *ss_cs_Q)
 		ifft(PSSfreq_tmpI, PSSfreq_tmpQ, Length_FFT, PSStime_I, PSStime_Q); // get PSS_time[64]
 
 		xx = calc_Sequence_Modulus(PSStime_I, PSStime_Q, 0);
-		
+
 		for (int samp_idx = 0; samp_idx < idx; samp_idx++)
 		{
 			yy = calc_Sequence_Modulus(ss_cs_I, ss_cs_Q, samp_idx);
@@ -370,7 +371,7 @@ int findPSS(float *ss_cs_I, float *ss_cs_Q)
 			nv = yy - xy / xx;
 			corr[samp_idx][Nid_2] = xy / nv;
 		}
-	}	
+	}
 
 	Nid_2 = ident_Nid_2(corr);
 	return Nid_2;
@@ -427,16 +428,16 @@ int ident_Nid_2(float (*corr)[3])
 int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 {
 	int i, j;
-	int Nid_1;   //return Nid_1
+	int Nid_1; //return Nid_1
 	int sf = 0;
 
 	int Len_FFT = 128;
 	int Len_SSS = 168;
 	int sss_peak_idx = pss_peak_idx - Len_FFT * 3 - 10 - 9 * 2;
-	
+
 	float sum0 = 0, sum5 = 0;
 	float sss0_max = 0, sss5_max = 0;
-	int   sss0_idx = 0, sss5_idx = 0; 
+	int sss0_idx = 0, sss5_idx = 0;
 
 	float corr_sss[Len_SSS][2]; //not initialize
 
@@ -464,7 +465,7 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 	float sss_c_I[62];
 	float sss_c_Q[62];
 
-	for (i = 0; i < 128; i++)  // get pss_tI[128], pss_tQ[128]
+	for (i = 0; i < 128; i++) // get pss_tI[128], pss_tQ[128]
 	{
 		pss_tI[i] = ss_cs_I[pss_peak_idx + i];
 		pss_tQ[i] = ss_cs_Q[pss_peak_idx + i];
@@ -474,22 +475,22 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 
 	for (i = 0; i < 31; i++)
 	{
-		pss_fI[i] = pss_f_tmpI[127 - 30 - i];   //pss_fI[0]= pss_f_tmp[127-30]
+		pss_fI[i] = pss_f_tmpI[127 - 30 - i]; //pss_fI[0]= pss_f_tmp[127-30]
 		pss_fQ[i] = pss_f_tmpQ[127 - 30 - i];
 	}
 
 	for (i = 31, j = 1; i < 62; i++, j++)
 	{
-		pss_fI[i] = pss_f_tmpI[j];    //pss_fI[31] = pss_f_tmpI[1]
+		pss_fI[i] = pss_f_tmpI[j]; //pss_fI[31] = pss_f_tmpI[1]
 		pss_fQ[i] = pss_f_tmpQ[j];
 	}
 
-	genPSS(Nid_2);    //get PSSfreqI[62], PSSfreqQ[62]
+	genPSS(Nid_2); //get PSSfreqI[62], PSSfreqQ[62]
 
-	for (i = 0; i < 62; i++)  //ce_I[62], ce_Q[62]
+	for (i = 0; i < 62; i++) //ce_I[62], ce_Q[62]
 	{
 		//(a + bi)* conj(c - di) = (a*c + b*d) +(- a*d + b*c)i
-		ce_I[i] =        pss_fI[i] * PSSfreq_I[i] + pss_fQ[i] * PSSfreq_Q[i]; 
+		ce_I[i] = pss_fI[i] * PSSfreq_I[i] + pss_fQ[i] * PSSfreq_Q[i];
 		ce_Q[i] = -1.0 * pss_fI[i] * PSSfreq_Q[i] + pss_fQ[i] * PSSfreq_I[i];
 	}
 
@@ -509,19 +510,19 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 			sss_fQ[i] = sss_f_tmpQ[127 - 30 - i];
 		}
 
-		for (i = 31, j = 1; i < 62; i++, j++)  
+		for (i = 31, j = 1; i < 62; i++, j++)
 		{
-			sss_fI[i] = sss_f_tmpI[j];  //sss_fI[31] = sss_f_tmpI[1]
+			sss_fI[i] = sss_f_tmpI[j]; //sss_fI[31] = sss_f_tmpI[1]
 			sss_fQ[i] = sss_f_tmpQ[j];
 		}
 		for (i = 0; i < 62; i++)
 		{
 			//(a + bi)* conj(c - di) = (a*c + b*d) +(- a*d + b*c)i
-			sss_c_I[i] =        sss_fI[i] * ce_I[i] + sss_fQ[i] * ce_Q[i];
-			sss_c_Q[i] = -1.0 * sss_fI[i] * ce_Q[i] + sss_fQ[i] * ce_I[i];  
+			sss_c_I[i] = sss_fI[i] * ce_I[i] + sss_fQ[i] * ce_Q[i];
+			sss_c_Q[i] = -1.0 * sss_fI[i] * ce_Q[i] + sss_fQ[i] * ce_I[i];
 		}
 
-		genSSS(Nid_1, Nid_2);  // SSS_du_0[62], SSS_du_5[62]
+		genSSS(Nid_1, Nid_2); // SSS_du_0[62], SSS_du_5[62]
 
 		// sss0
 		float sum0_tmpI = 0, sum0_tmpQ = 0;
@@ -532,7 +533,7 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 			sum0_tmpI = SSS_du_0[i] * sss_c_I[i];
 			sum0_tmpQ = SSS_du_0[i] * sss_c_Q[i];
 
-			sum0 = sum0 + sqrt(sum0_tmpI*sum0_tmpI + sum0_tmpQ*sum0_tmpQ);
+			sum0 = sum0 + sqrt(sum0_tmpI * sum0_tmpI + sum0_tmpQ * sum0_tmpQ);
 
 			sum5_tmpI = SSS_du_5[i] * sss_c_I[i];
 			sum5_tmpQ = SSS_du_5[i] * sss_c_Q[i];
@@ -567,49 +568,45 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 	else
 	{
 		sf = 5;
-		Nid_1 = sss5_idx - 1;		
+		Nid_1 = sss5_idx - 1;
 	}
-	
+
 	return Nid_1;
 }
 
 //cell_id = Nid_1*3 + Nid_2
 int Set_CellID(int Nid_1, int Nid_2)
 {
-	return ( Nid_1*3 + Nid_2);
+	return (Nid_1 * 3 + Nid_2);
 }
-
 
 int main()
 {
 	int Nid_1 = 0;
 	int Nid_2 = 0;
-	int Cell_ID = 0;                         //Cell_ID = Nid_1 * 3 + Nid_2
+	int Cell_ID = 0; //Cell_ID = Nid_1 * 3 + Nid_2
 
 	int count = 0;
 
-	ifstream infile("/home/leo/vscode/LTECell_Search/preprocess.dat", ios::in | ios::binary);
-	LTESync_init(infile);			          //ss_cs_I[5760], ss_cs_Q[5760]
-	
-	Nid_2 = findPSS(ss_cs_I, ss_cs_Q);        //corr[5760][3]
-	Nid_1 = findSSS(ss_cs_I, ss_cs_Q, Nid_2, PSS_Peak_idx);
+	ifstream infile("/home/leo/vscode/LTECell_Search/usrp_process.dat", ios::in | ios::binary);
+	LTESync_init(infile); //ss_cs_I[5760], ss_cs_Q[5760]
+
+	Nid_2 = findPSS(process_I, process_Q); //corr[5760][3]
+	Nid_1 = findSSS(process_I, process_Q, Nid_2, PSS_Peak_idx);
 	Cell_ID = Set_CellID(Nid_1, Nid_2);
 
-	/*for (int i = 2; i < 3; i++)
+/* 	for (int i = 1; i < 5760; i++)
     {
-		for (int j = 0; j < 5760; j++)
-		{
-			cout << "corr = " << corr[j][i] << endl;
-			count++;
-		}
-	}*/
+		cout << process_I[i] << " " << process_Q[i] << endl;
+		count++;
+	} */
 
 	cout << "count = " << count << endl;
-	
+
 	cout << "Nid_1 = " << Nid_1 << endl;
 	cout << "Nid_2 = " << Nid_2 << endl;
 	cout << "Cell_ID = " << Cell_ID << endl;
-	
+
 	cout << "peak_idx = " << PSS_Peak_idx << endl;
 
 	return 0;

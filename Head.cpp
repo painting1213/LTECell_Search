@@ -1,7 +1,7 @@
 #include "Head.h"
 
 //make all x[len] = 0
-void return_zero(float *x, int len)
+void  return_zero(float *x, int len)
 {
     for (int i = 0; i < len; i++)
     {

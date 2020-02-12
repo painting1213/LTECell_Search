@@ -27,8 +27,8 @@ float SSS_du_5[62];
 
 //float corr[5760][3] = {0};
 
-float ss_cs_I[5760];
-float ss_cs_Q[5760]; 
+float process_I[5760];
+float process_Q[5760]; 
 
 void ifft(float *inputI, float *inputQ, int length_fft, float *outputI, float *outputQ);
 void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ);
