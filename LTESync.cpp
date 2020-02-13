@@ -1,20 +1,22 @@
 #include "LTESync.h"
 #include "Head.h"
+#include <string.h>
 #include <cmath>
 
 //LTE Sync Init
-void LTESync_init(ifstream &infile)
+void LTESync_init(ifstream &infile_pss, ifstream &infile_sss)
 {
-	get_ss_cs(infile); //get ss_cs[5760]
+	get_preprocss_data(infile_pss, pss_preprocess_I, pss_preprocess_Q); //get pss_preprocess[5760]
+	get_preprocss_data(infile_sss, sss_preprocess_I, sss_preprocess_Q); //get sss_preprocess[5760 * 2]
 }
 
-//From File to get ss_cs_I[5760], ss_cs_Q[5760]
-void get_ss_cs(ifstream &infile)
+//From File to get preprocess_I, preprocess_I
+void get_preprocss_data(ifstream &infile, float *preprocess_I, float *preprocess_Q)
 {
 	struct Signal_float
 	{
 		float I_data; // 4 bytes
-		float Q_data;
+		float Q_data; // 4 bytes
 	};
 
 	Signal_float signal;
@@ -22,19 +24,19 @@ void get_ss_cs(ifstream &infile)
 
 	if (!infile)
 	{
-		cout << "Error, can not open the file \n"
+		std::cout << "Error, can not open the file \n"
 			 << endl;
 		return;
 	}
 
-	while (infile.read((char *)&signal, sizeof(signal)) && readBytes < 5760 * 8)
+	while (infile.read((char *)&signal, sizeof(signal)))
 	{
 		readBytes += infile.gcount(); //count the read bytes
 
 		if (readBytes % 8 == 0 && readBytes != 0)
 		{
-			process_I[readBytes / 8 - 1] = signal.I_data;
-			process_Q[readBytes / 8 - 1] = signal.Q_data;
+			preprocess_I[readBytes / 8 - 1] = signal.I_data;
+			preprocess_Q[readBytes / 8 - 1] = signal.Q_data;
 		}
 	}
 	//cout << "the numbers of total data is: " << readBytes / 8 << endl;
@@ -67,8 +69,8 @@ void ifft(float *inputI, float *inputQ, int scno, float *ouputI, float *ouputQ)
 			sumq = sumq + inputI[k] * expq + inputQ[k] * expi;
 		}
 
-		ouputI[n] = sumi / (1.0 * scno);
-		ouputQ[n] = sumq / (1.0 * scno);
+		ouputI[n] = sumi / ( 1.0 * scno);
+		ouputQ[n] = sumq / (-1.0 * scno);
 	}
 
 	return;
@@ -111,31 +113,31 @@ void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ)
 void swapPSS(float *PSSfreq_I, float *PSSfreq_Q, float *PSSfreq_tmpI, float *PSSfreq_tmpQ)
 {
 	int i = 0;
-	int length = 64;
+	// int length = 64;
 
-	float *tmpI = new float[length]; //delete
-	float *tmpQ = new float[length]; //delete
+	// float *tmpI = new float[length]; //delete
+	// float *tmpQ = new float[length]; //delete
 
-	return_zero(tmpI, length); // make all tmpI = 0
-	return_zero(tmpQ, length); // make all tmpQ = 0
+	// memset(tmpI, 0, length); // make all tmpI = 0
+	// memset(tmpQ, 0, length); // make all tmpQ = 0
 
 	for (i = 1; i < 32; i++)
 	{
-		tmpI[i] = PSSfreq_I[30 + i]; //tmp(1:31) = PSSfreq(31:61), begin at tmp[1]
-		tmpQ[i] = PSSfreq_Q[30 + i];
+		PSSfreq_tmpI[i] = PSSfreq_I[30 + i]; //tmp(1:31) = PSSfreq(31:61), begin at tmp[1]
+		PSSfreq_tmpQ[i] = PSSfreq_Q[30 + i];
 
-		tmpI[i + 32] = PSSfreq_I[i - 1]; //tmp(33:63) = PSSfreq(0:30), begin at tmp[33]
-		tmpI[i + 32] = PSSfreq_Q[i - 1];
+		PSSfreq_tmpI[i + 32] = PSSfreq_I[i - 1]; //tmp(33:63) = PSSfreq(0:30), begin at tmp[33]
+		PSSfreq_tmpQ[i + 32] = PSSfreq_Q[i - 1];
 	}
+	
+	// for (i = 0; i < length; i++)
+	// {
+	// 	PSSfreq_tmpI[i] = tmpI[i];
+	// 	PSSfreq_tmpQ[i] = tmpQ[i];
+	// }
 
-	for (i = 0; i < length; i++)
-	{
-		PSSfreq_tmpI[i] = tmpI[i];
-		PSSfreq_tmpQ[i] = tmpQ[i];
-	}
-
-	delete[] tmpI;
-	delete[] tmpQ;
+	// delete[] tmpI;
+	// delete[] tmpQ;
 }
 
 /**************calculate the modulus of complex sequence*************/
@@ -156,16 +158,23 @@ float calc_Sequence_Modulus(float *ss_cs_I, float *ss_cs_Q, int samp_idx)
 float calc_complex_Multi(float *PSStime_I, float *PSStime_Q, float *ss_cs_I, float *ss_cs_Q, int samp_idx)
 {
 	float Multi = 0;
+	float tmpI = 0;
+	float tmpQ = 0;
+
 	for (int i = samp_idx, j = 0; i < samp_idx + Length_FFT, j < 64; i++, j++) //the length of sequence is 64
 	{
-		Multi = Multi + pow(fabs(PSStime_I[j] * ss_cs_I[i] + PSStime_Q[j] * ss_cs_Q[i]), 2);
-		//Multi = Multi + PSStime_I[j] * ss_cs_I[i] + PSStime_Q[j] * ss_cs_Q[i];
+		//Multi = Multi + pow(fabs(PSStime_I[j] * ss_cs_I[i] + PSStime_Q[j] * ss_cs_Q[i]), 2);
+		tmpI = tmpI + PSStime_I[j] * ss_cs_I[i] - PSStime_Q[j] * ss_cs_Q[i];
+		tmpQ = tmpQ + PSStime_I[j] * ss_cs_Q[i] + PSStime_Q[j] * ss_cs_I[i];
 	}
+			
+	Multi = (tmpI * tmpI + tmpQ * tmpQ) * 1;
 	//整数绝对值    int c = abs(b-c);
 	//浮点数绝对值  double d = fabs(b-c)
-
 	return Multi;
 }
+
+
 
 //get freq[62] from PSSfreq[3][62]
 /*void GetPSSfreq(float (*PSSfreq_I)[62], float (*PSSfreq_Q)[62], int N_id_2, float *freq_I, float *freq_Q)
@@ -194,7 +203,7 @@ void genPSS(int Nid_2)
 	//validate Nid_2
 	if (!(Nid_2 >= 0 && Nid_2 <= 2))
 	{
-		cout << "Error: Invalid Nid_2: " << Nid_2 << endl;
+		std::cout << "Error: Invalid Nid_2: " << Nid_2 << endl;
 		return;
 	}
 
@@ -250,13 +259,13 @@ void genSSS(int Nid_1, int Nid_2)
 	//validate Nid_1 and Nid_2
 	if (!(Nid_1 >= 0 && Nid_1 <= 167))
 	{
-		cout << "Error, Invalid Nid_1: " << Nid_1 << endl;
+		std::cout << "Error, Invalid Nid_1: " << Nid_1 << endl;
 		return;
 	}
 
 	if (!(Nid_2 >= 0 && Nid_2 <= 2))
 	{
-		cout << "Error, Invalid Nid_2: " << Nid_2 << endl;
+		std::cout << "Error, Invalid Nid_2: " << Nid_2 << endl;
 		return;
 	}
 
@@ -343,37 +352,66 @@ void genSSS(int Nid_1, int Nid_2)
 int findPSS(float *ss_cs_I, float *ss_cs_Q)
 {
 	int Nid_2;
-	int idx = Nums_subframes * Nums_per_subframe - Length_FFT;
+	//int idx = Nums_subframes * Nums_per_subframe - Length_FFT -1;
+	int idx = 5760 - 64 -1;
 	float xx = 0, xy = 0, yy = 0, nv = 0;
 
-	float corr[5760][3];
+	//float corr[5696][3];
+	//memset(corr, 0, 5760*3);
 
 	//temp[64] of PSSfreq_I, PSSfreq_Q
-	float PSSfreq_tmpI[64] = {0}; //64 points, 0 ~ 63
-	float PSSfreq_tmpQ[64] = {0};
+	float *PSSfreq_tmpI = new float[64]; 
+	float *PSSfreq_tmpQ = new float[64];
 
+	memset(PSSfreq_tmpI, 0, 64); // make PSSfreq_tmpI[0-63] = 0
+	memset(PSSfreq_tmpQ, 0, 64);
+	
 	//PSS time domain data
-	float PSStime_I[64] = {0}; //64 points, 0 ~ 63
-	float PSStime_Q[64] = {0};
+	float *PSStime_I = new float[64]; //64 points, 0 ~ 63
+	float *PSStime_Q = new float[64];
 
-	for (int Nid_2 = 0; Nid_2 < 3; Nid_2++)
+	memset(PSStime_I, 0, 64); // make PSStime_I[0-63] = 0
+	memset(PSStime_Q, 0, 64);
+
+
+	for (Nid_2 = 0; Nid_2 < 3; Nid_2 ++)
 	{
 		genPSS(Nid_2);														// get PSSfreq_I[62], get PSSfreq_Q[62]
 		swapPSS(PSSfreq_I, PSSfreq_Q, PSSfreq_tmpI, PSSfreq_tmpQ);			// get PSSfreq_temp[64]
 		ifft(PSSfreq_tmpI, PSSfreq_tmpQ, Length_FFT, PSStime_I, PSStime_Q); // get PSS_time[64]
+		
+		for (int i = 0; i < Length_FFT; i++)
+		{
+			PSStime_Q[i] = -1.0 * PSStime_Q[i];                              // conj(a + bi) = a - bi 	
+		}  
 
-		xx = calc_Sequence_Modulus(PSStime_I, PSStime_Q, 0);
+		xx = calc_Sequence_Modulus(PSStime_I, PSStime_Q, 0); //pss_td'*pss_td
 
 		for (int samp_idx = 0; samp_idx < idx; samp_idx++)
 		{
-			yy = calc_Sequence_Modulus(ss_cs_I, ss_cs_Q, samp_idx);
-			xy = calc_complex_Multi(PSStime_I, PSStime_Q, ss_cs_I, ss_cs_Q, samp_idx);
+			yy = calc_Sequence_Modulus(pss_preprocess_I, pss_preprocess_Q, samp_idx);
+			xy = calc_complex_Multi(PSStime_I, PSStime_Q, pss_preprocess_I, pss_preprocess_Q, samp_idx);
 			nv = yy - xy / xx;
+
 			corr[samp_idx][Nid_2] = xy / nv;
 		}
 	}
 
 	Nid_2 = ident_Nid_2(corr);
+
+	delete []PSSfreq_tmpI; 
+	delete []PSSfreq_tmpQ;
+
+	delete []PSStime_I; 
+	delete []PSStime_Q;
+	
+	// ofstream outfile("data_corr_5696_3.txt", ios::out);
+	// for (int ii = 0; ii < 5696; ii++)
+	// {
+	// 	outfile << corr[ii][0] << " " << corr[ii][1] << " " <<corr[ii][2] << endl; 
+	// }
+	// outfile.close();
+
 	return Nid_2;
 }
 
@@ -383,49 +421,57 @@ int ident_Nid_2(float (*corr)[3])
 	//  Nid_2 = 最大值所在列值i
 	//  下面求peak_idx, 如果idx(1) < 128*4,peak_idx=idx(i)+n_samps_per_subframe*5,否则等于idx(i)
 
-	int Nid_2 = 0;
-	int idx_max = 0;
+	int i ,j;
+	int Nid_2;
+	// int idx_max = 0;
 
-	int val[3] = {0}; //每一列最大的绝对值val0 val1 val2
+	float val[3] = {0}; //每一列最大的绝对值val0 val1 val2
 	int idx[3] = {0}; //该最大值的索引值idx0 idx1 idx2
 
-	for (int i = 0; i < 3; i++) //corr的一列
+	for (i = 0; i < 3; i++) //corr的一列
 	{
 		float val_max = 0;
-		for (int j = 0; j < 5760; j++)
+
+		for (j = 0; j < 5696; j++)
 		{
 			if (fabs(corr[j][i]) > val_max)
 			{
-				val_max = corr[j][i];
+				val_max = fabs(corr[j][i]);
 				idx[i] = j; //get idx[0], idx[1], idx[2]
 			}
 		}
+
 		val[i] = val_max; //get val[0], val[1], val[2]
 	}
 
+
 	for (int k = 0; k < 3; k++)
 	{
-		if (val[k] > idx_max)
+		float valmax = 0;
+		if (val[k] > valmax)
 		{
-			idx_max = val[k];
+			valmax = val[k];
 			Nid_2 = k;
 		}
 	}
-
-	if (idx[Nid_2] < 128 * 4)
+	std::cout << "val[0] = " << val[0] << endl;
+	std::cout << "val[1] = " << val[1] << endl;
+	std::cout << "val[2] = " << val[2] << endl;
+	
+	if (idx[Nid_2 + 1] < 128 * 4)
 	{
 		PSS_Peak_idx = idx[Nid_2] + Nums_per_subframe * 5;
 	}
 	else
 	{
-		PSS_Peak_idx = idx[Nid_2];
+		PSS_Peak_idx = idx[Nid_2] + 1;
 	}
 
 	return Nid_2;
 }
 
 //get Nid_1, sf, return Nid_1
-int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
+int findSSS(float *sss_preprocess_I, float *sss_preprocess_Q, int Nid_2, int pss_peak_idx)
 {
 	int i, j;
 	int Nid_1; //return Nid_1
@@ -435,9 +481,11 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 	int Len_SSS = 168;
 	int sss_peak_idx = pss_peak_idx - Len_FFT * 3 - 10 - 9 * 2;
 
-	float sum0 = 0, sum5 = 0;
-	float sss0_max = 0, sss5_max = 0;
-	int sss0_idx = 0, sss5_idx = 0;
+	float sum0, sum5;
+	float sum0_tmpI, sum0_tmpQ;
+	float sum5_tmpI, sum5_tmpQ;
+	float sss0_max,  sss5_max;
+	int   sss0_idx,  sss5_idx;
 
 	float corr_sss[Len_SSS][2]; //not initialize
 
@@ -462,13 +510,16 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 	float ce_I[62];
 	float ce_Q[62];
 
+	float tmpI = 0;
+	float tmpQ = 0;
+
 	float sss_c_I[62];
 	float sss_c_Q[62];
 
 	for (i = 0; i < 128; i++) // get pss_tI[128], pss_tQ[128]
 	{
-		pss_tI[i] = ss_cs_I[pss_peak_idx + i];
-		pss_tQ[i] = ss_cs_Q[pss_peak_idx + i];
+		pss_tI[i] = sss_preprocess_I[pss_peak_idx + i -1];
+		pss_tQ[i] = sss_preprocess_Q[pss_peak_idx + i -1];
 	}
 
 	fft(pss_tI, pss_tQ, Len_FFT, pss_f_tmpI, pss_f_tmpQ);
@@ -487,27 +538,32 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 
 	genPSS(Nid_2); //get PSSfreqI[62], PSSfreqQ[62]
 
-	for (i = 0; i < 62; i++) //ce_I[62], ce_Q[62]
+	for (i = 0; i < 62; i++)
 	{
-		//(a + bi)* conj(c - di) = (a*c + b*d) +(- a*d + b*c)i
-		ce_I[i] = pss_fI[i] * PSSfreq_I[i] + pss_fQ[i] * PSSfreq_Q[i];
-		ce_Q[i] = -1.0 * pss_fI[i] * PSSfreq_Q[i] + pss_fQ[i] * PSSfreq_I[i];
+		PSSfreq_Q[i] = -1.0 *PSSfreq_Q[i];
 	}
 
-	for (int Nid_1 = 0; Nid_1 < 168; Nid_1++)
+	for (i = 0; i < 62; i++) //ce_I[62], ce_Q[62]
+	{
+		//(a + bi)* (c + di) = (a*c - b*d) +(a*d + b*c)i
+		ce_I[i] = pss_fI[i] * PSSfreq_I[i] - pss_fQ[i] * PSSfreq_Q[i];
+		ce_Q[i] = pss_fI[i] * PSSfreq_Q[i] + pss_fQ[i] * PSSfreq_I[i];
+	}
+
+	for (Nid_1 = 0; Nid_1 < 168; Nid_1 ++)
 	{
 		for (i = 0; i < 128; i++)
 		{
-			sss_tI[i] = ss_cs_I[sss_peak_idx + i];
-			sss_tQ[i] = ss_cs_Q[sss_peak_idx + i];
+			sss_tI[i] = sss_preprocess_I[sss_peak_idx + i -1];
+			sss_tQ[i] = sss_preprocess_Q[sss_peak_idx + i -1];
 		}
 
 		fft(sss_tI, sss_tQ, Len_FFT, sss_f_tmpI, sss_f_tmpQ);
 
 		for (i = 0; i < 31; i++)
 		{
-			sss_fI[i] = sss_f_tmpI[127 - 30 - i]; //sss_fI[0] = sss_f_tmpI[127-30]
-			sss_fQ[i] = sss_f_tmpQ[127 - 30 - i];
+			sss_fI[i] = sss_f_tmpI[127 - 30 + i]; //sss_fI[0] = sss_f_tmpI[127-30]
+			sss_fQ[i] = sss_f_tmpQ[127 - 30 + i];
 		}
 
 		for (i = 31, j = 1; i < 62; i++, j++)
@@ -515,36 +571,49 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 			sss_fI[i] = sss_f_tmpI[j]; //sss_fI[31] = sss_f_tmpI[1]
 			sss_fQ[i] = sss_f_tmpQ[j];
 		}
+
+		//conj(ce)
 		for (i = 0; i < 62; i++)
 		{
-			//(a + bi)* conj(c - di) = (a*c + b*d) +(- a*d + b*c)i
-			sss_c_I[i] = sss_fI[i] * ce_I[i] + sss_fQ[i] * ce_Q[i];
-			sss_c_Q[i] = -1.0 * sss_fI[i] * ce_Q[i] + sss_fQ[i] * ce_I[i];
+			ce_Q[i] = -1.0 *ce_Q[i];
+		}
+
+		for (i = 0; i < 62; i++)
+		{
+			//(a + bi)* (c + di) = (a*c - b*d) +( a*d + b*c)i
+			sss_c_I[i] = sss_fI[i] * ce_I[i] - sss_fQ[i] * ce_Q[i];
+			sss_c_Q[i] = sss_fI[i] * ce_Q[i] + sss_fQ[i] * ce_I[i];
 		}
 
 		genSSS(Nid_1, Nid_2); // SSS_du_0[62], SSS_du_5[62]
 
 		// sss0
-		float sum0_tmpI = 0, sum0_tmpQ = 0;
-		float sum5_tmpI = 0, sum5_tmpQ = 0;
+		sum0 = 0;
+		sum5 = 0;
+
+		sum0_tmpI = 0, sum0_tmpQ = 0;
+		sum5_tmpI = 0, sum5_tmpQ = 0;
 
 		for (i = 0; i < 62; i++)
 		{
-			sum0_tmpI = SSS_du_0[i] * sss_c_I[i];
-			sum0_tmpQ = SSS_du_0[i] * sss_c_Q[i];
+			sum0_tmpI = sum0_tmpI + SSS_du_0[i] * sss_c_I[i];
+			sum0_tmpQ = sum0_tmpQ + SSS_du_0[i] * sss_c_Q[i];
 
-			sum0 = sum0 + sqrt(sum0_tmpI * sum0_tmpI + sum0_tmpQ * sum0_tmpQ);
-
-			sum5_tmpI = SSS_du_5[i] * sss_c_I[i];
-			sum5_tmpQ = SSS_du_5[i] * sss_c_Q[i];
-
-			sum5 = sum5 + sqrt(sum5_tmpI * sum5_tmpI + sum5_tmpQ * sum5_tmpQ);
+			sum5_tmpI = sum5_tmpI + SSS_du_5[i] * sss_c_I[i];
+			sum5_tmpQ = sum5_tmpI + SSS_du_5[i] * sss_c_Q[i];
 		}
+
+		sum0 = sqrt(sum0_tmpI * sum0_tmpI + sum0_tmpQ * sum0_tmpQ);
+		sum5 = sqrt(sum5_tmpI * sum5_tmpI + sum5_tmpQ * sum5_tmpQ);
+
 		corr_sss[Nid_1][0] = sum0;
 		corr_sss[Nid_1][1] = sum5;
 	}
 
 	//get sss0_max, sss5_max
+	sss0_max = 0, sss5_max = 0;
+	sss0_idx = 0, sss5_idx = 0;
+
 	for (i = 0; i < 168; i++)
 	{
 		if (corr_sss[i][0] > sss0_max)
@@ -559,6 +628,7 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 			sss5_idx = i;
 		}
 	}
+	//std::cout << "sss0_max = " << sss0_max << " " << "sss5_max = "<< sss5_max <<endl;
 
 	if (sss0_max > sss5_max)
 	{
@@ -571,6 +641,7 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx)
 		Nid_1 = sss5_idx - 1;
 	}
 
+	Nid_1 = Nid_1 + 1;
 	return Nid_1;
 }
 
@@ -582,32 +653,22 @@ int Set_CellID(int Nid_1, int Nid_2)
 
 int main()
 {
-	int Nid_1 = 0;
-	int Nid_2 = 0;
-	int Cell_ID = 0; //Cell_ID = Nid_1 * 3 + Nid_2
-
 	int count = 0;
+	int Nid_2 = 0;
+	int Nid_1 = 0;
+	int Cell_ID = 0; 				//Cell_ID = Nid_1 * 3 + Nid_2
 
-	ifstream infile("/home/leo/vscode/LTECell_Search/usrp_process.dat", ios::in | ios::binary);
-	LTESync_init(infile); //ss_cs_I[5760], ss_cs_Q[5760]
+	ifstream infile_pss("/home/leo/vscode/LTECell_Search/usrp_pss_process.dat", ios::in | ios::binary);
+	ifstream infile_sss("/home/leo/vscode/LTECell_Search/usrp_sss_process.dat", ios::in | ios::binary);
+	LTESync_init(infile_pss, infile_sss); //preprocess_I[5760], preprocess_Q[5760]
 
-	Nid_2 = findPSS(process_I, process_Q); //corr[5760][3]
-	Nid_1 = findSSS(process_I, process_Q, Nid_2, PSS_Peak_idx);
+	Nid_2 = findPSS(pss_preprocess_I, pss_preprocess_Q); //corr[5696][3]
+	Nid_1 = findSSS(sss_preprocess_I, sss_preprocess_Q, Nid_2, PSS_Peak_idx * 2);
 	Cell_ID = Set_CellID(Nid_1, Nid_2);
-
-/* 	for (int i = 1; i < 5760; i++)
-    {
-		cout << process_I[i] << " " << process_Q[i] << endl;
-		count++;
-	} */
-
-	cout << "count = " << count << endl;
-
-	cout << "Nid_1 = " << Nid_1 << endl;
-	cout << "Nid_2 = " << Nid_2 << endl;
-	cout << "Cell_ID = " << Cell_ID << endl;
-
-	cout << "peak_idx = " << PSS_Peak_idx << endl;
+	
+	cout << "Nid_1: " << Nid_1 << ","<< "Nid_2: " << Nid_2 << ","<<"Cell_ID: " << Cell_ID << endl;
+	cout << "subframe idx: " << sf <<endl;
+	cout << "peak_idx: " << PSS_Peak_idx * 2 << endl;
 
 	return 0;
 }

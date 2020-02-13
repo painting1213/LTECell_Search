@@ -24,25 +24,38 @@ void PreProcess_init(ifstream &infile)
 
         Resample(ss_cs_I, ss_cs_Q, ss_cs_I_Dec, ss_cs_Q_Dec);
 
+        ofstream outfile1;
+        outfile1.open("usrp_sss_process.dat", ios::app | ios::binary);
+
+        if (outfile1.is_open())
+        {
+            for (int i = 0; i < NumSamples_subframe / 16; i++)
+            {
+                outfile1.write((char *)(ss_cs_I_Dec + i), sizeof(float));
+                outfile1.write((char *)(ss_cs_Q_Dec + i), sizeof(float));
+            }
+        }
+
         conv_same(ss_cs_I_Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_I_Dec);
         conv_same(ss_cs_Q_Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_Q_Dec);
 
         Decimation(ss_cs_I_Dec, NumSamples_subframe / 16, 2, ss_cs_I_process);
         Decimation(ss_cs_Q_Dec, NumSamples_subframe / 16, 2, ss_cs_Q_process);
 
-        ofstream outfile;
-        outfile.open("usrp_process.dat", ios::app | ios::binary);
+        ofstream outfile2;
+        outfile2.open("usrp_pss_process.dat", ios::app | ios::binary);
 
-        if (outfile.is_open())
+        if (outfile2.is_open())
         {
             for (int i = 0; i < NumSamples_subframe / 32; i++)
             {
-                outfile.write((char *)(ss_cs_I_process + i), sizeof(float));
-                outfile.write((char *)(ss_cs_Q_process + i), sizeof(float));
+                outfile2.write((char *)(ss_cs_I_process + i), sizeof(float));
+                outfile2.write((char *)(ss_cs_Q_process + i), sizeof(float));
             }
         }
 
-        outfile.close();
+        outfile1.close();
+        outfile2.close();
     }
 
 }
@@ -170,7 +183,9 @@ void conv_same(float *x, int x_length, const float *h, const int h_length, float
 int main()
 {
     int count = 0;
-    ifstream infile("usrp_samples.dat", ios::in | ios::binary);
+    //ifstream infile("usrp_samples.dat", ios::in | ios::binary);
+    
+    ifstream infile("usrp_port0.dat", ios::in | ios::binary);
     PreProcess_init(infile); // usrp_preprocess.dat
 
     /*for(int i = 0; i< NumSamples_subframe/16; i++)
