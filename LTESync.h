@@ -17,7 +17,7 @@ const int Nums_per_subframe = 960; //每个子帧1ms,每一个子帧的样本点
 //const short subframe_cache = 6;
 
 int PSS_Peak_idx = 0;
-int sf = 0;
+int sf;
 
 //PSS frequency domain data
 float PSSfreq_I[62];     //after genPSS(Nid_2)
@@ -40,7 +40,7 @@ float corr[5696][3];
 void ifft(float *inputI, float *inputQ, int length_fft, float *outputI, float *outputQ);
 void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ);
 
-void LTESync_init(ifstream &infile_pss, ifstream &infile_sss);
+void LTESync_init();
 void get_preprocss_data(ifstream &infile, float *preprocess_I, float *preprocess_Q);                            //ss_cs_I[5760], ss_cs_Q[5760]
 void swapPSS(float *PSSfreq_I, float *PSSfreq_Q, float *PSSfreq_tmpI, float *PSSfreq_tmpQ);
 //void GetPSSfreq(float (*PSSfreq_I)[62], float (*PSSfreq_Q)[62], int N_id_2,float *pssfreq_I, float *pssfreq_Q);

@@ -2,7 +2,6 @@
 #define _PREPROCESS_H_
 
 #include <iostream>
-#include <stdlib.h>
 #include <string.h>
 #include <fstream>
 #include "Head.h"
@@ -12,7 +11,17 @@ using namespace std;
 //	sscache = 对数据1/16重采样，使用半带滤波器HBF或CIC---------滤波, 30.72e6*0.001=30.72e3, 30.72e3/16=1920
 //	sscache_f = 对sscache进行滤波(卷积)，给定filter_coffe系数，得到的数据与sscache长度相同-------卷积，滤波
 //  sscache_d = 对卷积后的结果进行1抽取，使用半带滤波器HBF-------滤波
+struct Signal_Short
+{
+    short I_Data; //2 bytes
+    short Q_Data;
+};
 
+struct Signal_Float
+{
+    float I_Data; //4 bytes
+    float Q_Data;
+};
 
 const int NumSamples_total = 184320;      //6ms， 30.72e6 * 0.06 = 184320
 const int NumSamples_subframe = 30720;    //read Numamples numbers every 1ms
@@ -42,8 +51,13 @@ float ss_cs_Q_Dec[NumSamples_subframe / 16];   //after the HBF*4
 float ss_cs_I_process[NumSamples_subframe / 32]; // the data for following process
 float ss_cs_Q_process[NumSamples_subframe / 32]; // the data for following process
 
-void GetData(ifstream &infile);                  //&infile
-void PreProcess_init(ifstream &infile);
+//void GetData(ifstream &infile);                  //&infile
+
+void Get_Short_Data(ifstream &infile);
+void Get_Float_Data(ifstream &infile);
+
+void WriteData();
+void PreProcess_init();
 
 void Resample(float *ss_cs_I, float *ss_cs_Q, float *ss_cs_I_dec, float *ss_cs_Q_dec);
 void halfband_filter(float *input, int inlength, const float *filtercoef, int filength, float *output);
