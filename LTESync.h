@@ -1,41 +1,13 @@
 #ifndef _LTESYNC_H_
 #define _LTESYNC_H_
 
-#include <iostream>
 #include <fstream>
 using namespace std;
 
 #define pi 3.14159265
 
-const int scno = 64;
-const int Length_FFT = 64;
-const int Length_PSS = 62;
-const int Nums_subframes = 6;
-const int Nums_per_subframe = 960; //每个子帧1ms,每一个子帧的样本点数目=30.72M*1/1000*32 = 960
-
-//const short subframe_gap = 6;
-//const short subframe_cache = 6;
-
-int PSS_Peak_idx = 0;
-int sf;
-
-//PSS frequency domain data
-float PSSfreq_I[62];     //after genPSS(Nid_2)
-float PSSfreq_Q[62];
-
-float SSS_du_0[62];      //after genSSS(Nid_1, Nid_2)
-float SSS_du_5[62];
-
-//float corr[5760][3] = {0};
-
-float pss_preprocess_I[5760];
-float pss_preprocess_Q[5760]; 
-
-float sss_preprocess_I[5760 * 2];
-float sss_preprocess_Q[5760 * 2];
-
-
-float corr[5696][3];
+extern int PSS_Peak_idx;
+extern int sf;
 
 void ifft(float *inputI, float *inputQ, int length_fft, float *outputI, float *outputQ);
 void fft(float *inputI, float *inputQ, int scno, float *outputI, float *outputQ);
@@ -58,5 +30,8 @@ int findSSS(float *ss_cs_I, float *ss_cs_Q, int Nid_2, int pss_peak_idx);  //ret
 
 int ident_Nid_2(float (*corr)[3]);
 int Set_CellID(int Nid_1, int Nid_2);
+
+int mod(float a, int b);
+int mod(int a, int b);
 
 #endif

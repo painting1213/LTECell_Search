@@ -1,23 +1,54 @@
-#include "PreProcess.h"
+#include <iostream>
+#include <string.h>
 #include <cstdio> //C++
 
+#include "PreProcess.h"
+
+// filter parameters
+const int hbfiltercoef2length = 7;      //const
+const int hbfiltercoef1length = 11;
+const int decfilterlength = 17;
+const int filter_ds_length = 11;
+
+const float hbfiltercoef2[7] = {1.0*-1058/16384, 0, 1.0*9250/16384, 1.0, 1.0*9250/16384, 0, 1.0*-1058/16384};
+const float hbfiltercoef1[11] = {1.0*242/16384, 0, 1.0*-1736/16384, 0, 1.0*9686/16384, 1.0, 1.0*9686/16384, 0,
+                                1.0*-1736/16384, 0, 1.0*242/18384};
+const float decfiltercoef[17] = {-80.0/15394,-146.0/15394,287.0/15394,742.0/15394,-589.0/15394,-2449.0/15394, 
+                                877.0/15394,10045.0/15394,1.0,10045.0/15394,877.0/15394,-2449.0/15394,-589.0/15394, 
+                                742.0/15394,287.0/15394,-146.0/15394,-80.0/15394};
+const float filter_ds[]={0.125, 0, -0.25, 0, 0.625, 1, 0.625, 0, -0.25, 0, 0.125};
+
+//Define global variables
+float I_total[NumSamples_total];               //get the total data
+float Q_total[NumSamples_total];               //get the total data
+
+float ss_cs_I[NumSamples_subframe];            //get 30720 numbers
+float ss_cs_Q[NumSamples_subframe];            //get 30720 numbers
+
+float ss_cs_I_16Dec[NumSamples_subframe / 16];   //after the HBF*4
+float ss_cs_Q_16Dec[NumSamples_subframe / 16];   //after the HBF*4
+
+float ss_cs_I_32Dec[NumSamples_subframe / 32]; // the data for following process
+float ss_cs_Q_32Dec[NumSamples_subframe / 32]; // the data for following process
+
+// Init preprocess
 void PreProcess_init()
 {
-    Signal_Short short_signal;  //read short data
-    Signal_Float float_signal;  //read float data
+    Signal_Short short_signal; //read short data
+    Signal_Float float_signal; //read float data
 
-    const char *filePath1 = "/home/leo/vscode/LTECell_Search/usrp_process_pss.dat";
-    const char *filePath2 = "/home/leo/vscode/LTECell_Search/usrp_process_sss.dat";
+    const char *filePath1 = "/home/leo/vscode/LTECell_Search_V1/usrp_process_pss.dat";
+    const char *filePath2 = "/home/leo/vscode/LTECell_Search_V1/usrp_process_sss.dat";
 
-    //ifstream infile("/home/leo/vscode/LTECell_Search/usrp_samples_PCI_463.dat", ios::in | ios::binary);
+    //ifstream infile("/home/leo/vscode/LTECell_Search_V1/usrp_data/usrp_float_samples_PCI_463.dat", ios::in | ios::binary);
     //Get_Float_Data(infile); // get I_total, Q_total
 
-    ifstream infile("usrp_samples_PCI_56.dat", ios::in | ios::binary);
+    ifstream infile("/home/leo/vscode/LTECell_Search_V1/usrp_data/usrp_short_samples_PCI_419.dat", ios::in | ios::binary);
     Get_Short_Data(infile); // get I_total, Q_total
 
     fstream infile1, infile2;
-    infile1.open("/home/leo/vscode/LTECell_Search/usrp_process_pss.dat", ios::in);
-    infile2.open("/home/leo/vscode/LTECell_Search/usrp_process_sss.dat", ios::in);
+    infile1.open("/home/leo/vscode/LTECell_Search_V1/usrp_process_pss.dat", ios::in);
+    infile2.open("/home/leo/vscode/LTECell_Search_V1/usrp_process_sss.dat", ios::in);
 
     if (!infile1 && !infile2) //if infile1 and infile2 don't exist
     {
@@ -69,7 +100,7 @@ void WriteData()
         //Loop 5, CurrentNum:122880 --> 153600
         //Loop 6, CurrentNum:153600 --> 184320
 
-        Resample(ss_cs_I, ss_cs_Q, ss_cs_I_Dec, ss_cs_Q_Dec);
+        Resample(ss_cs_I, ss_cs_Q, ss_cs_I_16Dec, ss_cs_Q_16Dec);
 
         ofstream outfile1;
         outfile1.open("usrp_process_sss.dat", ios::app | ios::binary);
@@ -78,16 +109,16 @@ void WriteData()
         {
             for (int i = 0; i < NumSamples_subframe / 16; i++)
             {
-                outfile1.write((char *)(ss_cs_I_Dec + i), sizeof(float));
-                outfile1.write((char *)(ss_cs_Q_Dec + i), sizeof(float));
+                outfile1.write((char *)(ss_cs_I_16Dec + i), sizeof(float));
+                outfile1.write((char *)(ss_cs_Q_16Dec + i), sizeof(float));
             }
         }
 
-        conv_same(ss_cs_I_Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_I_Dec);
-        conv_same(ss_cs_Q_Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_Q_Dec);
+        Conv_same(ss_cs_I_16Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_I_16Dec);
+        Conv_same(ss_cs_Q_16Dec, NumSamples_subframe / 16, filter_ds, filter_ds_length, ss_cs_Q_16Dec);
 
-        Decimation(ss_cs_I_Dec, NumSamples_subframe / 16, 2, ss_cs_I_process);
-        Decimation(ss_cs_Q_Dec, NumSamples_subframe / 16, 2, ss_cs_Q_process);
+        Decimation(ss_cs_I_16Dec, NumSamples_subframe / 16, 2, ss_cs_I_32Dec);
+        Decimation(ss_cs_Q_16Dec, NumSamples_subframe / 16, 2, ss_cs_Q_32Dec);
 
         ofstream outfile2;
         outfile2.open("usrp_process_pss.dat", ios::app | ios::binary);
@@ -96,8 +127,8 @@ void WriteData()
         {
             for (int i = 0; i < NumSamples_subframe / 32; i++)
             {
-                outfile2.write((char *)(ss_cs_I_process + i), sizeof(float));
-                outfile2.write((char *)(ss_cs_Q_process + i), sizeof(float));
+                outfile2.write((char *)(ss_cs_I_32Dec + i), sizeof(float));
+                outfile2.write((char *)(ss_cs_Q_32Dec + i), sizeof(float));
             }
         }
 
@@ -161,7 +192,7 @@ void Get_Float_Data(ifstream &infile) //&infile
     infile.close();
 }
 
-void Resample(float *ss_cs_I, float *ss_cs_Q, float *ss_cs_I_dec, float *ss_cs_Q_dec)
+void Resample(float *ss_cs_I, float *ss_cs_Q, float *ss_cs_I_16Dec, float *ss_cs_Q_16Dec)
 {
     float *ss_cs_I_2Dec = new float[NumSamples_subframe / 2]; //after the HBF
     float *ss_cs_Q_2Dec = new float[NumSamples_subframe / 2];
@@ -172,17 +203,26 @@ void Resample(float *ss_cs_I, float *ss_cs_Q, float *ss_cs_I_dec, float *ss_cs_Q
     float *ss_cs_I_8Dec = new float[NumSamples_subframe / 8]; //after the HBF * 3
     float *ss_cs_Q_8Dec = new float[NumSamples_subframe / 8];
 
-    halfband_filter(ss_cs_I, NumSamples_subframe, hbfiltercoef2, hbfiltercoef2length, ss_cs_I_2Dec);
-    halfband_filter(ss_cs_Q, NumSamples_subframe, hbfiltercoef2, hbfiltercoef2length, ss_cs_Q_2Dec);
+    // Halfband_filter(ss_cs_I, NumSamples_subframe, hbfiltercoef2, hbfiltercoef2length, ss_cs_I_2Dec);
+    // Halfband_filter(ss_cs_Q, NumSamples_subframe, hbfiltercoef2, hbfiltercoef2length, ss_cs_Q_2Dec);
 
-    halfband_filter(ss_cs_I_2Dec, NumSamples_subframe / 2, hbfiltercoef2, hbfiltercoef2length, ss_cs_I_4Dec);
-    halfband_filter(ss_cs_Q_2Dec, NumSamples_subframe / 2, hbfiltercoef2, hbfiltercoef2length, ss_cs_Q_4Dec);
+    // Halfband_filter(ss_cs_I_2Dec, NumSamples_subframe / 2, hbfiltercoef2, hbfiltercoef2length, ss_cs_I_4Dec);
+    // Halfband_filter(ss_cs_Q_2Dec, NumSamples_subframe / 2, hbfiltercoef2, hbfiltercoef2length, ss_cs_Q_4Dec);
 
-    halfband_filter(ss_cs_I_4Dec, NumSamples_subframe / 4, hbfiltercoef1, hbfiltercoef1length, ss_cs_I_8Dec);
-    halfband_filter(ss_cs_Q_4Dec, NumSamples_subframe / 4, hbfiltercoef1, hbfiltercoef1length, ss_cs_Q_8Dec);
+    // Halfband_filter(ss_cs_I_4Dec, NumSamples_subframe / 4, hbfiltercoef1, hbfiltercoef1length, ss_cs_I_8Dec);
+    // Halfband_filter(ss_cs_Q_4Dec, NumSamples_subframe / 4, hbfiltercoef1, hbfiltercoef1length, ss_cs_Q_8Dec);
 
-    halfband_filter(ss_cs_I_8Dec, NumSamples_subframe / 8, decfiltercoef, decfilterlength, ss_cs_I_Dec); //after HBF * 4
-    halfband_filter(ss_cs_Q_8Dec, NumSamples_subframe / 8, decfiltercoef, decfilterlength, ss_cs_Q_Dec);
+    Halfband_filter(ss_cs_I, NumSamples_subframe, decfiltercoef, decfilterlength, ss_cs_I_2Dec);
+    Halfband_filter(ss_cs_Q, NumSamples_subframe, decfiltercoef, decfilterlength, ss_cs_Q_2Dec);
+
+    Halfband_filter(ss_cs_I_2Dec, NumSamples_subframe / 2, decfiltercoef, decfilterlength, ss_cs_I_4Dec);
+    Halfband_filter(ss_cs_Q_2Dec, NumSamples_subframe / 2, decfiltercoef, decfilterlength, ss_cs_Q_4Dec);
+
+    Halfband_filter(ss_cs_I_4Dec, NumSamples_subframe / 4, decfiltercoef, decfilterlength, ss_cs_I_8Dec);
+    Halfband_filter(ss_cs_Q_4Dec, NumSamples_subframe / 4, decfiltercoef, decfilterlength, ss_cs_Q_8Dec);
+
+    Halfband_filter(ss_cs_I_8Dec, NumSamples_subframe / 8, decfiltercoef, decfilterlength, ss_cs_I_16Dec); //after HBF * 4
+    Halfband_filter(ss_cs_Q_8Dec, NumSamples_subframe / 8, decfiltercoef, decfilterlength, ss_cs_Q_16Dec);
 
     delete[] ss_cs_I_2Dec;
     delete[] ss_cs_Q_2Dec;
@@ -194,11 +234,11 @@ void Resample(float *ss_cs_I, float *ss_cs_Q, float *ss_cs_I_dec, float *ss_cs_Q
     delete[] ss_cs_Q_8Dec;
 }
 
-void halfband_filter(float *input, int inlength, const float *filtercoef, int filength, float *output)
+void Halfband_filter(float *input, int inlength, const float *filtercoef, int filength, float *output)
 {
     float *output_hbf = new float[inlength];
 
-    conv_same(input, inlength, filter_ds, filter_ds_length, output_hbf);
+    Conv_same(input, inlength, filter_ds, filter_ds_length, output_hbf);
     Decimation(output_hbf, inlength, 2, output);
 
     delete[] output_hbf;
@@ -213,7 +253,7 @@ void Decimation(float *input, int inlength, int Deci, float *output)
     }
 }
 
-void conv_same(float *x, int x_length, const float *h, const int h_length, float *output)
+void Conv_same(float *x, int x_length, const float *h, const int h_length, float *output)
 {
     int k = 0, i = 0;
     int Len = x_length + h_length - 1;
@@ -250,7 +290,7 @@ void conv_same(float *x, int x_length, const float *h, const int h_length, float
 
 int main()
 {
-    int count = 0; 
+    int count = 0;
     PreProcess_init(); // usrp_preprocess.dat
 
     //cout << "count = " << count << endl;

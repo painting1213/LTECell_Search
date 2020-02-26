@@ -1,13 +1,43 @@
-#include "LTESync.h"
-#include "Head.h"
+#include <iostream>
 #include <string.h>
 #include <cmath>
+
+#include "LTESync.h"
+
+//Define gloabal variables
+int PSS_Peak_idx = 0;
+int sf;
+
+//const variables
+const int scno = 64;
+const int Length_FFT = 64;
+const int Length_PSS = 62;
+const int Nums_subframes = 6;
+const int Nums_per_subframe = 960; //每个子帧1ms,每一个子帧的样本点数目=30.72M*1/1000*32 = 960
+//const short subframe_gap = 6;
+//const short subframe_cache = 6;
+
+//PSS frequency domain data
+float PSSfreq_I[62];     //after genPSS(Nid_2)
+float PSSfreq_Q[62];
+float corr[5696][3];
+
+//SSS data
+float SSS_du_0[62];      //after genSSS(Nid_1, Nid_2)
+float SSS_du_5[62];
+
+//process data
+float pss_preprocess_I[5760];
+float pss_preprocess_Q[5760]; 
+
+float sss_preprocess_I[5760 * 2];
+float sss_preprocess_Q[5760 * 2];
 
 //LTE Sync Init
 void LTESync_init()
 {
-	ifstream infile_pss("/home/leo/vscode/LTECell_Search/usrp_process_pss.dat", ios::in | ios::binary);
-	ifstream infile_sss("/home/leo/vscode/LTECell_Search/usrp_process_sss.dat", ios::in | ios::binary);
+	ifstream infile_pss("usrp_process_pss.dat", ios::in | ios::binary);
+	ifstream infile_sss("usrp_process_sss.dat", ios::in | ios::binary);
 
 	get_preprocss_data(infile_pss, pss_preprocess_I, pss_preprocess_Q); //get pss_preprocess[5760]
 	get_preprocss_data(infile_sss, sss_preprocess_I, sss_preprocess_Q); //get sss_preprocess[5760 * 2]
@@ -453,13 +483,13 @@ int ident_Nid_2(float (*corr)[3])
 		}
 	}
 
-	// std::cout << "val[0] = " << val[0] << endl;
-	// std::cout << "val[1] = " << val[1] << endl;
-	// std::cout << "val[2] = " << val[2] << endl;
+	std::cout << "val[0] = " << val[0] << endl;
+	std::cout << "val[1] = " << val[1] << endl;
+	std::cout << "val[2] = " << val[2] << endl;
 
-	// std::cout << "idx[0] = " << idx[0] << endl;
-	// std::cout << "idx[1] = " << idx[1] << endl;
-	// std::cout << "idx[2] = " << idx[2] << endl;
+	std::cout << "idx[0] = " << idx[0] << endl;
+	std::cout << "idx[1] = " << idx[1] << endl;
+	std::cout << "idx[2] = " << idx[2] << endl;
 
 	if (idx[Nid_2] < 128 * 4)
 	{
@@ -678,8 +708,8 @@ int findSSS(float *sss_preprocess_I, float *sss_preprocess_Q, int Nid_2, int pss
 		Nid_1 = sss5_idx - 1;
 	}
 
-	//std::cout << "sss0_max = " << sss0_max << " " << "sss5_max = "<< sss5_max <<endl;
-	//std::cout << "sss0_idx = " << sss0_idx << " " << "sss5_idx = "<< sss5_idx <<endl;
+	std::cout << "sss0_max = " << sss0_max << " " << "sss5_max = "<< sss5_max <<endl;
+	std::cout << "sss0_idx = " << sss0_idx << " " << "sss5_idx = "<< sss5_idx <<endl;
 
 	Nid_1 = Nid_1 + 1;
 	return Nid_1;
@@ -689,6 +719,19 @@ int findSSS(float *sss_preprocess_I, float *sss_preprocess_Q, int Nid_2, int pss
 int Set_CellID(int Nid_1, int Nid_2)
 {
 	return (Nid_1 * 3 + Nid_2);
+}
+
+//mod(float, int)
+int mod(float a, int b)
+{
+	int temp = int(a);
+	return temp % b;
+}
+
+//mod(int, int)
+int mod(int a, int b)
+{
+	return a % b;
 }
 
 int main()
